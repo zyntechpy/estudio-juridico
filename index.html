@@ -1371,85 +1371,99 @@ SERÁ JUSTICIA.`
                                             )}
                                         </button>
 
-                                        {/* Notifications Dropdown */}
+                                        {/* Notifications Dropdown Panel (Responsive: centered on mobile, right-anchored on desktop) */}
                                         {showNotificationsMenu && (
-                                            <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 text-slate-800 z-50 overflow-hidden modal-animate-in">
-                                                <div className="bg-navy-900 text-white p-4 flex items-center justify-between border-b border-navy-800">
-                                                    <div className="flex items-center space-x-2">
-                                                        <span className="text-gold-400 text-lg">🔔</span>
-                                                        <div>
-                                                            <h4 className="font-bold text-sm leading-none">Control de Vencimientos</h4>
-                                                            <p className="text-[11px] text-slate-300 mt-0.5">{urgentExpedientes.length} trámite(s) prioritarios esta semana</p>
-                                                        </div>
-                                                    </div>
-                                                    <button onClick={() => setShowNotificationsMenu(false)} className="text-slate-400 hover:text-white text-xs">✕</button>
-                                                </div>
+                                            <>
+                                                {/* Backdrop for outside tap to close */}
+                                                <div 
+                                                    onClick={() => setShowNotificationsMenu(false)}
+                                                    className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-xs sm:bg-transparent"
+                                                />
 
-                                                {/* Push Notifications Activation Button */}
-                                                <div className="p-3 bg-slate-50 border-b border-slate-200 text-xs flex items-center justify-between">
-                                                    <span className="text-slate-600 font-medium">Alertas en Celular/PC:</span>
-                                                    {webNotifGranted ? (
-                                                        <span className="text-emerald-600 font-bold flex items-center space-x-1">
-                                                            <span>✅ Activadas</span>
-                                                        </span>
-                                                    ) : (
+                                                <div className="fixed inset-x-3 top-16 sm:absolute sm:right-0 sm:top-full sm:inset-x-auto sm:w-96 mt-2 bg-white rounded-3xl shadow-2xl border border-slate-200 text-slate-800 z-50 overflow-hidden modal-animate-in max-h-[85vh] sm:max-h-[80vh] flex flex-col">
+                                                    <div className="bg-navy-900 text-white p-3.5 sm:p-4 flex items-center justify-between border-b border-navy-800 flex-shrink-0">
+                                                        <div className="flex items-center space-x-2">
+                                                            <span className="text-gold-400 text-lg">🔔</span>
+                                                            <div>
+                                                                <h4 className="font-bold text-sm leading-none">Control de Vencimientos</h4>
+                                                                <p className="text-[11px] text-slate-300 mt-0.5">{urgentExpedientes.length} trámite(s) prioritarios esta semana</p>
+                                                            </div>
+                                                        </div>
                                                         <button 
-                                                            onClick={handleRequestWebNotifications}
-                                                            className="px-2.5 py-1 bg-gold-600 hover:bg-gold-700 text-white font-bold rounded-lg text-[11px] shadow transition"
+                                                            onClick={() => setShowNotificationsMenu(false)} 
+                                                            className="p-1.5 rounded-xl hover:bg-navy-800 text-slate-400 hover:text-white text-xs"
+                                                            title="Cerrar"
                                                         >
-                                                            Activar Notificaciones
+                                                            ✕
                                                         </button>
-                                                    )}
-                                                </div>
+                                                    </div>
 
-                                                <div className="max-h-80 overflow-y-auto divide-y divide-slate-100">
-                                                    {urgentExpedientes.length === 0 ? (
-                                                        <div className="p-6 text-center text-slate-400 text-xs">
-                                                            🎉 No hay vencimientos urgentes programados para esta semana.
-                                                        </div>
-                                                    ) : (
-                                                        urgentExpedientes.map(exp => {
-                                                            const urg = getUrgencyInfo(exp.fechaVencimiento);
-                                                            return (
-                                                                <div 
-                                                                    key={exp.id}
-                                                                    onClick={() => {
-                                                                        setSelectedExpediente(exp);
-                                                                        setShowNotificationsMenu(false);
-                                                                        setActiveTab('expedientes');
-                                                                    }}
-                                                                    className="p-3.5 hover:bg-slate-50 transition cursor-pointer space-y-1 group"
-                                                                >
-                                                                    <div className="flex items-center justify-between">
-                                                                        <span className="font-mono text-[11px] font-bold text-navy-900 bg-slate-100 px-1.5 py-0.5 rounded">
-                                                                            Causa N° {exp.numeroCausa}
-                                                                        </span>
-                                                                        <span className={`px-2 py-0.5 rounded text-[10px] ${urg.badgeClass}`}>
-                                                                            {urg.label}
-                                                                        </span>
+                                                    {/* Push Notifications Activation Button */}
+                                                    <div className="p-3 bg-slate-50 border-b border-slate-200 text-xs flex items-center justify-between flex-shrink-0">
+                                                        <span className="text-slate-600 font-medium">Alertas en Celular/PC:</span>
+                                                        {webNotifGranted ? (
+                                                            <span className="text-emerald-600 font-bold flex items-center space-x-1">
+                                                                <span>✅ Activadas</span>
+                                                            </span>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={handleRequestWebNotifications}
+                                                                className="px-2.5 py-1 bg-gold-600 hover:bg-gold-700 text-white font-bold rounded-lg text-[11px] shadow transition"
+                                                            >
+                                                                Activar Notificaciones
+                                                            </button>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex-1 overflow-y-auto divide-y divide-slate-100 max-h-[60vh] sm:max-h-80">
+                                                        {urgentExpedientes.length === 0 ? (
+                                                            <div className="p-6 text-center text-slate-400 text-xs">
+                                                                🎉 No hay vencimientos urgentes programados para esta semana.
+                                                            </div>
+                                                        ) : (
+                                                            urgentExpedientes.map(exp => {
+                                                                const urg = getUrgencyInfo(exp.fechaVencimiento);
+                                                                return (
+                                                                    <div 
+                                                                        key={exp.id}
+                                                                        onClick={() => {
+                                                                            setSelectedExpediente(exp);
+                                                                            setShowNotificationsMenu(false);
+                                                                            setActiveTab('expedientes');
+                                                                        }}
+                                                                        className="p-3.5 hover:bg-slate-50 transition cursor-pointer space-y-1 group"
+                                                                    >
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className="font-mono text-[11px] font-bold text-navy-900 bg-slate-100 px-1.5 py-0.5 rounded">
+                                                                                Causa N° {exp.numeroCausa}
+                                                                            </span>
+                                                                            <span className={`px-2 py-0.5 rounded text-[10px] ${urg.badgeClass}`}>
+                                                                                {urg.label}
+                                                                            </span>
+                                                                        </div>
+                                                                        <p className="text-xs font-semibold text-slate-800 line-clamp-1 group-hover:text-navy-900">
+                                                                            {exp.proximoTramite}
+                                                                        </p>
+                                                                        <div className="text-[11px] text-slate-500 flex justify-between items-center">
+                                                                            <span>{exp.abogadoAsignado}</span>
+                                                                            <button 
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    triggerTestSystemNotification(exp);
+                                                                                }}
+                                                                                className="text-navy-700 hover:underline text-[10px] font-semibold"
+                                                                                title="Enviar prueba de notificación del SO"
+                                                                            >
+                                                                                📲 Alerta SO
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
-                                                                    <p className="text-xs font-semibold text-slate-800 line-clamp-1 group-hover:text-navy-900">
-                                                                        {exp.proximoTramite}
-                                                                    </p>
-                                                                    <div className="text-[11px] text-slate-500 flex justify-between items-center">
-                                                                        <span>{exp.abogadoAsignado}</span>
-                                                                        <button 
-                                                                            onClick={(e) => {
-                                                                                e.stopPropagation();
-                                                                                triggerTestSystemNotification(exp);
-                                                                            }}
-                                                                            className="text-navy-700 hover:underline text-[10px] font-semibold"
-                                                                            title="Enviar prueba de notificación del SO"
-                                                                        >
-                                                                            📲 Alerta SO
-                                                                        </button>
-                                                                    </div>
-                                                                </div>
-                                                            );
-                                                        })
-                                                    )}
+                                                                );
+                                                            })
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            </div>
+                                            </>
                                         )}
                                     </div>
 
