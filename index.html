@@ -1281,72 +1281,81 @@ SERÁ JUSTICIA.`
             return (
                 <div className="min-h-screen flex flex-col bg-slate-100 text-slate-800">
                     {/* TOP HEADER */}
-                    <header className="bg-navy-900 text-white sticky top-0 z-30 shadow-md border-b border-navy-800">
-                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                            <div className="flex items-center justify-between h-16">
+                    <header className="bg-navy-900 text-white sticky top-0 z-30 shadow-lg border-b border-navy-800">
+                        <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8">
+                            <div className="flex items-center justify-between min-h-[4.25rem] py-2.5 gap-2 sm:gap-4">
                                 {/* Logo & Local Server Status */}
-                                <div className="flex items-center space-x-3">
-                                    <div className="w-10 h-10 rounded-xl bg-gold-600 flex items-center justify-center font-serif text-white font-bold text-xl shadow-md">
+                                <div className="flex items-center space-x-2.5 flex-shrink-0">
+                                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gold-600 flex items-center justify-center font-serif text-white font-bold text-lg sm:text-xl shadow-md flex-shrink-0">
                                         ⚖
                                     </div>
-                                    <div>
-                                        <h1 className="font-serif font-bold text-lg leading-tight tracking-wide text-white">
-                                            LexLocal <span className="text-xs font-sans font-normal text-gold-400 bg-navy-800 px-2 py-0.5 rounded border border-navy-700 ml-1">v2.0 Vencimientos</span>
-                                        </h1>
-                                        <div className="flex items-center text-xs text-emerald-400 space-x-1.5 mt-0.5">
-                                            <span className="relative flex h-2 w-2">
+                                    <div className="flex flex-col justify-center">
+                                        <div className="flex items-center space-x-1.5 leading-tight">
+                                            <span className="font-serif font-black text-base sm:text-lg text-white tracking-tight">LexLocal</span>
+                                            <span className="text-[10px] font-sans font-bold text-gold-400 bg-navy-800 px-1.5 py-0.5 rounded border border-navy-700">v2.1</span>
+                                        </div>
+                                        <div className="flex items-center text-[10px] sm:text-[11px] text-emerald-400 space-x-1.5 mt-0.5 leading-none">
+                                            <span className="relative flex h-2 w-2 flex-shrink-0">
                                                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                                                 <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                                             </span>
-                                            <span className="font-mono text-[11px] text-slate-300">Servidor Local: <strong className="text-emerald-400 font-semibold">127.0.0.1 (Offline Ready)</strong></span>
+                                            <span className="text-slate-300 font-medium hidden sm:inline">Estudio Jurídico</span>
+                                            <span className="text-slate-500 hidden sm:inline">•</span>
+                                            <span className="text-emerald-400 font-semibold font-mono">127.0.0.1 (Offline Ready)</span>
                                         </div>
                                     </div>
                                 </div>
 
                                 {/* Desktop Navigation Tabs */}
-                                <nav className="hidden md:flex space-x-1 bg-navy-950/60 p-1 rounded-lg border border-navy-800">
+                                <nav className="hidden lg:flex items-center space-x-1 bg-navy-950/70 p-1 rounded-xl border border-navy-800">
                                     <button 
                                         onClick={() => setActiveTab('expedientes')}
-                                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'expedientes' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
+                                        className={`px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-semibold transition flex items-center space-x-1 ${activeTab === 'expedientes' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
                                     >
-                                        📂 Expedientes & Vencimientos ({expedientes.length})
+                                        <span>📂</span>
+                                        <span>Expedientes ({expedientes.length})</span>
                                     </button>
                                     <button 
                                         onClick={() => setActiveTab('audit')}
-                                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'audit' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
+                                        className={`px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-semibold transition flex items-center space-x-1 ${activeTab === 'audit' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
                                     >
-                                        📋 Registro de Actividades
+                                        <span>📋</span>
+                                        <span>Actividades</span>
                                     </button>
                                     <button 
                                         onClick={() => setActiveTab('dashboard')}
-                                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'dashboard' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
+                                        className={`px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-semibold transition flex items-center space-x-1 ${activeTab === 'dashboard' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
                                     >
-                                        📊 Panel General
+                                        <span>📊</span>
+                                        <span>Panel General</span>
                                     </button>
                                     <button 
                                         onClick={() => setActiveTab('modelos')}
-                                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'modelos' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
+                                        className={`px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-semibold transition flex items-center space-x-1 ${activeTab === 'modelos' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
                                     >
-                                        📚 Modelos Forenses ({LEGAL_TEMPLATES_PARAGUAY.length})
+                                        <span>📚</span>
+                                        <span>Modelos ({LEGAL_TEMPLATES_PARAGUAY.length})</span>
                                     </button>
                                     {isAdmin && (
                                         <button 
                                             onClick={() => setActiveTab('users')}
-                                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'users' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
+                                            className={`px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-semibold transition flex items-center space-x-1 ${activeTab === 'users' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
                                         >
-                                            👥 Usuarios & Permisos ({users.length})
+                                            <span>👥</span>
+                                            <span>Usuarios ({users.length})</span>
                                         </button>
                                     )}
                                     <button 
                                         onClick={() => setActiveTab('network')}
-                                        className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'network' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
+                                        className={`px-2.5 xl:px-3 py-1.5 rounded-lg text-xs xl:text-sm font-semibold transition flex items-center space-x-1 ${activeTab === 'network' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
                                     >
-                                        💾 Copias de Seguridad & Red
+                                        <span>💾</span>
+                                        <span>Respaldo & Red</span>
                                     </button>
                                 </nav>
 
                                 {/* User Badge & Notifications Center */}
-                                <div className="flex items-center space-x-3">
+                                <div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0">
                                     {/* IN-APP NOTIFICATIONS BELL BUTTON */}
                                     <div className="relative">
                                         <button 
@@ -1467,45 +1476,45 @@ SERÁ JUSTICIA.`
                             </div>
                         </div>
 
-                        {/* Mobile Navigation Tabs */}
-                        <div className="md:hidden flex border-t border-navy-800 bg-navy-950 text-xs">
+                        {/* Mobile & Tablet Navigation Tabs */}
+                        <div className="lg:hidden flex overflow-x-auto border-t border-navy-800 bg-navy-950 text-xs px-2 py-1 scrollbar-thin">
                             <button 
                                 onClick={() => setActiveTab('expedientes')}
-                                className={`flex-1 py-2.5 text-center font-medium border-b-2 ${activeTab === 'expedientes' ? 'border-gold-500 text-gold-400 font-bold bg-navy-900' : 'border-transparent text-slate-400'}`}
+                                className={`flex-shrink-0 px-3 py-2 text-center font-medium rounded-lg ${activeTab === 'expedientes' ? 'text-gold-400 font-bold bg-navy-900 border border-navy-700' : 'text-slate-400 hover:text-white'}`}
                             >
-                                📂 Expedientes
+                                📂 Expedientes ({expedientes.length})
                             </button>
                             <button 
                                 onClick={() => setActiveTab('audit')}
-                                className={`flex-1 py-2.5 text-center font-medium border-b-2 ${activeTab === 'audit' ? 'border-gold-500 text-gold-400 font-bold bg-navy-900' : 'border-transparent text-slate-400'}`}
+                                className={`flex-shrink-0 px-3 py-2 text-center font-medium rounded-lg ${activeTab === 'audit' ? 'text-gold-400 font-bold bg-navy-900 border border-navy-700' : 'text-slate-400 hover:text-white'}`}
                             >
-                                📋 Auditoría
+                                📋 Actividades
                             </button>
                             <button 
                                 onClick={() => setActiveTab('dashboard')}
-                                className={`flex-1 py-2.5 text-center font-medium border-b-2 ${activeTab === 'dashboard' ? 'border-gold-500 text-gold-400 font-bold bg-navy-900' : 'border-transparent text-slate-400'}`}
+                                className={`flex-shrink-0 px-3 py-2 text-center font-medium rounded-lg ${activeTab === 'dashboard' ? 'text-gold-400 font-bold bg-navy-900 border border-navy-700' : 'text-slate-400 hover:text-white'}`}
                             >
-                                📊 Resumen
+                                📊 Panel
                             </button>
                             <button 
                                 onClick={() => setActiveTab('modelos')}
-                                className={`flex-1 py-2.5 text-center font-medium border-b-2 ${activeTab === 'modelos' ? 'border-gold-500 text-gold-400 font-bold bg-navy-900' : 'border-transparent text-slate-400'}`}
+                                className={`flex-shrink-0 px-3 py-2 text-center font-medium rounded-lg ${activeTab === 'modelos' ? 'text-gold-400 font-bold bg-navy-900 border border-navy-700' : 'text-slate-400 hover:text-white'}`}
                             >
-                                📚 Modelos
+                                📚 Modelos ({LEGAL_TEMPLATES_PARAGUAY.length})
                             </button>
                             {isAdmin && (
                                 <button 
                                     onClick={() => setActiveTab('users')}
-                                    className={`flex-1 py-2.5 text-center font-medium border-b-2 ${activeTab === 'users' ? 'border-gold-500 text-gold-400 font-bold bg-navy-900' : 'border-transparent text-slate-400'}`}
+                                    className={`flex-shrink-0 px-3 py-2 text-center font-medium rounded-lg ${activeTab === 'users' ? 'text-gold-400 font-bold bg-navy-900 border border-navy-700' : 'text-slate-400 hover:text-white'}`}
                                 >
-                                    👥 Usuarios
+                                    👥 Usuarios ({users.length})
                                 </button>
                             )}
                             <button 
                                 onClick={() => setActiveTab('network')}
-                                className={`flex-1 py-2.5 text-center font-medium border-b-2 ${activeTab === 'network' ? 'border-gold-500 text-gold-400 font-bold bg-navy-900' : 'border-transparent text-slate-400'}`}
+                                className={`flex-shrink-0 px-3 py-2 text-center font-medium rounded-lg ${activeTab === 'network' ? 'text-gold-400 font-bold bg-navy-900 border border-navy-700' : 'text-slate-400 hover:text-white'}`}
                             >
-                                💾 Backup
+                                💾 Respaldo
                             </button>
                         </div>
                     </header>
