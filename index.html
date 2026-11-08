@@ -2912,6 +2912,7 @@ SERÁ JUSTICIA.`
             const [searchTerm, setSearchTerm] = useState('');
             const [selectedTemplate, setSelectedTemplate] = useState(LEGAL_TEMPLATES_PARAGUAY[0]);
             const [isAttachModalOpen, setIsAttachModalOpen] = useState(false);
+            const [isReaderModalOpen, setIsReaderModalOpen] = useState(false);
             const [targetExpId, setTargetExpId] = useState(expedientes.length > 0 ? expedientes[0].id : '');
 
             const fueros = ['Todos', 'Civil y Comercial', 'Penal', 'Laboral', 'Niñez y Adolescencia', 'Garantías Constitucionales'];
@@ -2936,41 +2937,94 @@ SERÁ JUSTICIA.`
                 });
             }, [selectedFuero, selectedBiblioteca, searchTerm]);
 
-            const handleCopy = () => {
-                if (!selectedTemplate) return;
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(selectedTemplate.contenido);
-                    showToast('¡Modelo copiado al portapapeles! Listo para pegar en Word');
+            const handleCopy = (t) => {
+                const template = t || selectedTemplate;
+                if (!template) return;
+                const text = template.contenido;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(text).then(() => {
+                        showToast('¡Modelo copiado al portapapeles! Listo para pegar en Word o WhatsApp');
+                    }).catch(() => {
+                        fallbackCopyText(text);
+                    });
                 } else {
-                    const el = document.createElement('textarea');
-                    el.value = selectedTemplate.contenido;
-                    document.body.appendChild(el);
-                    el.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(el);
-                    showToast('¡Modelo copiado al portapapeles!');
+                    fallbackCopyText(text);
                 }
             };
 
-            const handleDownloadWord = () => {
-                if (!selectedTemplate) return;
-                const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-                <head><meta charset='utf-8'><title>${selectedTemplate.titulo}</title>
-                <style>
-                    body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; margin: 2.5cm; }
-                    h2 { text-align: center; font-size: 14pt; margin-bottom: 20px; }
-                    p { text-align: justify; margin-bottom: 12px; }
-                </style>
-                </head><body><h2>REPÚBLICA DEL PARAGUAY - PODER JUDICIAL</h2><pre style="font-family: 'Times New Roman', serif; font-size: 12pt; white-space: pre-wrap;">${selectedTemplate.contenido}</pre></body></html>`;
+            const fallbackCopyText = (text) => {
+                const el = document.createElement('textarea');
+                el.value = text;
+                el.style.position = 'fixed';
+                el.style.left = '-9999px';
+                document.body.appendChild(el);
+                el.focus();
+                el.select();
+                try {
+                    document.execCommand('copy');
+                    showToast('¡Modelo copiado al portapapeles!');
+                } catch (e) {
+                    showToast('Selecciona el texto para copiar manualmente', 'warning');
+                }
+                document.body.removeChild(el);
+            };
 
-                const blob = new Blob([header], { type: 'application/msword;charset=utf-8' });
+            const handleDownloadWord = (t) => {
+                const template = t || selectedTemplate;
+                if (!template) return;
+                
+                const cleanTitle = template.titulo.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, '_').substring(0, 35);
+                const fileName = `${cleanTitle}.doc`;
+
+                const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head>
+                    <meta charset='utf-8'>
+                    <title>${template.titulo}</title>
+                    <style>
+                        @page { size: 21.59cm 35.56cm; margin: 3cm 2.5cm; }
+                        body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.5; margin: 2.5cm; color: #000; }
+                        h2 { text-align: center; font-size: 13pt; font-weight: bold; margin-bottom: 24pt; }
+                        pre { font-family: 'Times New Roman', serif; font-size: 12pt; white-space: pre-wrap; text-align: justify; }
+                        .footer { margin-top: 30pt; font-size: 9pt; color: #666; border-top: 1pt solid #ccc; padding-top: 6pt; }
+                    </style>
+                </head>
+                <body>
+                    <h2>REPÚBLICA DEL PARAGUAY - PODER JUDICIAL</h2>
+                    <pre>${template.contenido}</pre>
+                    <div class="footer">Fuente: ${template.biblioteca} • LexLocal Estudio Jurídico</div>
+                </body>
+                </html>`;
+
+                // \ufeff adds UTF-8 BOM so Word on mobile / Windows renders accents correctly
+                const blob = new Blob(['\ufeff', header], { type: 'application/msword;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
-                a.download = `${selectedTemplate.titulo.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ]/g, '_').substring(0, 35)}.doc`;
+                a.download = fileName;
+                a.target = '_blank';
+                document.body.appendChild(a);
                 a.click();
-                URL.revokeObjectURL(url);
-                showToast('Descargando archivo editable para Microsoft Word (.doc)');
+                
+                // Keep blob URL active for 60 seconds so mobile browsers complete download
+                setTimeout(() => {
+                    if (a.parentNode) document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 60000);
+
+                showToast(`Descargando "${fileName}" para Word...`);
+            };
+
+            const handleShare = (t) => {
+                const template = t || selectedTemplate;
+                if (!template) return;
+                if (navigator.share) {
+                    navigator.share({
+                        title: template.titulo,
+                        text: `*${template.titulo}*\nFuente: ${template.biblioteca}\nNormativa: ${template.leyes}\n\n${template.contenido}`
+                    }).catch(() => {});
+                } else {
+                    handleCopy(template);
+                }
             };
 
             const handleConfirmAttach = () => {
@@ -3062,8 +3116,13 @@ SERÁ JUSTICIA.`
                                     return (
                                         <div
                                             key={t.id}
-                                            onClick={() => setSelectedTemplate(t)}
-                                            className={`p-4 rounded-2xl border transition cursor-pointer text-left space-y-2 ${isSelected ? 'bg-white border-gold-500 shadow-md ring-2 ring-gold-200' : 'bg-white border-slate-200 hover:border-gold-300 hover:shadow-sm'}`}
+                                            onClick={() => {
+                                                setSelectedTemplate(t);
+                                                if (window.innerWidth < 1024) {
+                                                    setIsReaderModalOpen(true);
+                                                }
+                                            }}
+                                            className={`p-4 rounded-2xl border transition cursor-pointer text-left space-y-2.5 ${isSelected ? 'bg-white border-gold-500 shadow-md ring-2 ring-gold-200' : 'bg-white border-slate-200 hover:border-gold-300 hover:shadow-sm'}`}
                                         >
                                             <div className="flex items-center justify-between gap-2">
                                                 <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-navy-50 text-navy-800 border border-navy-200">
@@ -3085,6 +3144,59 @@ SERÁ JUSTICIA.`
                                             <p className="text-[11px] text-slate-600 line-clamp-2">
                                                 {t.resumen}
                                             </p>
+
+                                            {/* Action Buttons on every Card (Mobile & Quick Access) */}
+                                            <div className="flex items-center justify-between pt-2 border-t border-slate-100 gap-1.5 flex-wrap">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedTemplate(t);
+                                                        setIsReaderModalOpen(true);
+                                                    }}
+                                                    className="px-3 py-1.5 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-xl text-xs transition flex items-center space-x-1 shadow-sm"
+                                                    title="Abrir y leer el escrito completo en pantalla"
+                                                >
+                                                    <span>👁️ Leer Escrito</span>
+                                                </button>
+
+                                                <div className="flex items-center space-x-1">
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleShare(t);
+                                                        }}
+                                                        className="p-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-lg text-xs font-bold transition flex items-center space-x-1"
+                                                        title="Compartir a WhatsApp / Correo"
+                                                    >
+                                                        <span>📤</span>
+                                                        <span className="hidden sm:inline text-[10px]">Enviar</span>
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleCopy(t);
+                                                        }}
+                                                        className="p-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs"
+                                                        title="Copiar texto"
+                                                    >
+                                                        📋
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            handleDownloadWord(t);
+                                                        }}
+                                                        className="px-2 py-1.5 bg-gold-50 hover:bg-gold-100 text-gold-900 border border-gold-200 rounded-lg text-xs font-bold flex items-center space-x-1 shadow-xs"
+                                                        title="Descargar archivo Word (.doc)"
+                                                    >
+                                                        <span>📥 .doc</span>
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
                                     );
                                 })
@@ -3111,22 +3223,36 @@ SERÁ JUSTICIA.`
 
                                         <div className="flex items-center space-x-2 flex-wrap">
                                             <button
-                                                onClick={handleCopy}
+                                                onClick={() => setIsReaderModalOpen(true)}
+                                                className="px-3 py-1.5 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-xl text-xs shadow transition flex items-center space-x-1"
+                                                title="Maximizar lectura"
+                                            >
+                                                <span>👁️ Pantalla Completa</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleCopy(selectedTemplate)}
                                                 className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition flex items-center space-x-1 border border-slate-300"
                                                 title="Copiar texto al portapapeles"
                                             >
                                                 <span>📋 Copiar</span>
                                             </button>
                                             <button
-                                                onClick={handleDownloadWord}
-                                                className="px-3 py-1.5 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-xl text-xs shadow transition flex items-center space-x-1"
+                                                onClick={() => handleShare(selectedTemplate)}
+                                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow transition flex items-center space-x-1"
+                                                title="Compartir modelo"
+                                            >
+                                                <span>📤 Compartir</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDownloadWord(selectedTemplate)}
+                                                className="px-3 py-1.5 bg-gold-600 hover:bg-gold-700 text-white font-bold rounded-xl text-xs shadow transition flex items-center space-x-1"
                                                 title="Descargar para Word"
                                             >
                                                 <span>📥 Word (.doc)</span>
                                             </button>
                                             <button
                                                 onClick={() => setIsAttachModalOpen(true)}
-                                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow transition flex items-center space-x-1"
+                                                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-900 text-white font-bold rounded-xl text-xs shadow transition flex items-center space-x-1"
                                                 title="Adjuntar como borrador a un expediente activo"
                                             >
                                                 <span>📑 Usar en Causa</span>
@@ -3221,6 +3347,111 @@ SERÁ JUSTICIA.`
                                     >
                                         Incorporar a la Causa
                                     </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* FULL SCREEN TEMPLATE READER MODAL (ESPECIALLY DESIGNED FOR MOBILE) */}
+                    {isReaderModalOpen && selectedTemplate && (
+                        <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-slate-950/80 backdrop-blur-sm">
+                            <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full p-4 sm:p-6 modal-animate-in border border-slate-300 max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
+                                
+                                {/* Modal Header */}
+                                <div className="flex items-start justify-between border-b pb-3 flex-shrink-0">
+                                    <div className="space-y-1 pr-2">
+                                        <div className="flex items-center flex-wrap gap-1.5">
+                                            <span className="text-[10px] font-bold uppercase tracking-wider text-gold-700 bg-gold-50 px-2 py-0.5 rounded border border-gold-200">
+                                                {selectedTemplate.fuero}
+                                            </span>
+                                            <span className="text-xs text-slate-500 font-semibold truncate max-w-[280px]">
+                                                {selectedTemplate.biblioteca.split('(')[0]}
+                                            </span>
+                                        </div>
+                                        <h3 className="font-serif font-bold text-sm sm:text-base text-navy-900 leading-tight">
+                                            {selectedTemplate.titulo}
+                                        </h3>
+                                    </div>
+                                    <button 
+                                        onClick={() => setIsReaderModalOpen(false)}
+                                        className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 text-lg flex-shrink-0"
+                                        title="Cerrar lectura"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+
+                                {/* Modal Scrollable Legal Text */}
+                                <div className="flex-1 overflow-y-auto py-3 space-y-3">
+                                    <div className="text-center border-b border-slate-200 pb-3 space-y-1">
+                                        <div className="text-xs font-sans tracking-widest uppercase font-bold text-slate-400">
+                                            REPÚBLICA DEL PARAGUAY • PODER JUDICIAL
+                                        </div>
+                                        <div className="text-xs font-sans text-slate-600 font-medium">
+                                            Formulario Forense Oficial • {selectedTemplate.leyes}
+                                        </div>
+                                    </div>
+
+                                    <div className="bg-slate-50 p-4 sm:p-6 rounded-2xl border border-slate-200 shadow-inner">
+                                        <pre className="font-serif whitespace-pre-wrap text-slate-900 text-xs sm:text-[13px] leading-relaxed select-text font-normal">
+                                            {selectedTemplate.contenido}
+                                        </pre>
+                                    </div>
+
+                                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-slate-600">
+                                        💡 <strong>Consejo Práctico:</strong> Puedes presionar <strong>"Copiar"</strong> para pegarlo en tu app de Word o WhatsApp, o presionar <strong>"Descargar (.doc)"</strong> para guardar el archivo editable en tu celular o PC.
+                                    </div>
+                                </div>
+
+                                {/* Modal Sticky Action Footer */}
+                                <div className="border-t pt-3 flex items-center justify-between gap-2 flex-wrap flex-shrink-0">
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsReaderModalOpen(false)}
+                                        className="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-300"
+                                    >
+                                        Cerrar
+                                    </button>
+
+                                    <div className="flex items-center space-x-1.5 sm:space-x-2 flex-wrap">
+                                        <button
+                                            type="button"
+                                            onClick={() => handleCopy(selectedTemplate)}
+                                            className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold rounded-xl text-xs transition flex items-center space-x-1 border border-slate-300 shadow-sm"
+                                            title="Copiar texto al portapapeles"
+                                        >
+                                            <span>📋</span>
+                                            <span>Copiar</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleShare(selectedTemplate)}
+                                            className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs shadow transition flex items-center space-x-1"
+                                            title="Compartir a WhatsApp / Otras apps"
+                                        >
+                                            <span>📤</span>
+                                            <span>Compartir</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => handleDownloadWord(selectedTemplate)}
+                                            className="px-3.5 py-2 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-xl text-xs shadow transition flex items-center space-x-1"
+                                            title="Descargar archivo Word"
+                                        >
+                                            <span>📥</span>
+                                            <span>Descargar (.doc)</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setIsReaderModalOpen(false);
+                                                setIsAttachModalOpen(true);
+                                            }}
+                                            className="hidden sm:flex px-3 py-2 bg-navy-800 hover:bg-navy-700 text-white font-semibold rounded-xl text-xs transition items-center space-x-1"
+                                        >
+                                            <span>📑 Adjuntar a Causa</span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
