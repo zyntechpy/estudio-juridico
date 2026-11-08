@@ -13,7 +13,9 @@
     <link rel="apple-touch-icon" href="icon-192.png">
     <script>
         if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
-            navigator.serviceWorker.register('./sw.js').catch(() => {});
+            navigator.serviceWorker.register('./sw.js?v=3').then(function(reg) {
+                reg.update();
+            }).catch(function() {});
         }
         function showRecoveryNotice(msg) {
             var existing = document.getElementById('lexlocal-recovery');
