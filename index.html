@@ -86,9 +86,9 @@
 
         // --- PRESET USERS ---
         const PRESET_USERS = [
-            { id: 'u1', username: 'dr_garcia', name: 'Dr. Roberto García', role: 'Abogado Senior / Admin', pass: 'garcia123', avatar: 'RG', color: 'bg-gold-600' },
-            { id: 'u2', username: 'dra_lopez', name: 'Dra. Elena López', role: 'Abogada Asociada', pass: 'lopez123', avatar: 'EL', color: 'bg-blue-600' },
-            { id: 'u3', username: 'asistente_martinez', name: 'Carlos Martínez', role: 'Asistente Jurídico', pass: 'martinez123', avatar: 'CM', color: 'bg-emerald-600' }
+            { id: 'u1', username: 'dr_garcia', name: 'Dr. Roberto García', role: 'Abogado Senior / Admin', pass: 'garcia123', avatar: 'RG', color: 'bg-gold-600', isAdmin: true },
+            { id: 'u2', username: 'dra_lopez', name: 'Dra. Elena López', role: 'Abogada Asociada', pass: 'lopez123', avatar: 'EL', color: 'bg-blue-600', isAdmin: false },
+            { id: 'u3', username: 'asistente_martinez', name: 'Carlos Martínez', role: 'Asistente Jurídico', pass: 'martinez123', avatar: 'CM', color: 'bg-emerald-600', isAdmin: false }
         ];
 
         // Helper to generate dynamic dates relative to today
@@ -807,10 +807,23 @@ SERÁ JUSTICIA.`
 
         // --- MAIN APP COMPONENT ---
         function App() {
+            const [users, setUsers] = useState(() => {
+                const saved = localStorage.getItem('lexlocal_users');
+                if (saved) {
+                    try {
+                        const parsed = JSON.parse(saved);
+                        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+                    } catch (e) {}
+                }
+                return PRESET_USERS;
+            });
+
             const [currentUser, setCurrentUser] = useState(() => {
                 const saved = localStorage.getItem('lexlocal_user');
                 return saved ? JSON.parse(saved) : null;
             });
+
+            const isAdmin = Boolean(currentUser && (currentUser.isAdmin || (currentUser.role && currentUser.role.toLowerCase().includes('admin'))));
 
             const [expedientes, setExpedientes] = useState(() => {
                 const saved = localStorage.getItem('lexlocal_expedientes');
@@ -862,6 +875,10 @@ SERÁ JUSTICIA.`
             useEffect(() => {
                 localStorage.setItem('lexlocal_logs', JSON.stringify(auditLogs));
             }, [auditLogs]);
+
+            useEffect(() => {
+                localStorage.setItem('lexlocal_users', JSON.stringify(users));
+            }, [users]);
 
             const addLog = (accion, numeroExpediente = '-') => {
                 if (!currentUser) return;
@@ -1085,6 +1102,79 @@ SERÁ JUSTICIA.`
                 showToast(`Modelo incorporado como borrador a la Causa N° ${targetCausa}`);
             };
 
+            const handleCreateUser = (userData) => {
+                const usernameClean = userData.username.trim().toLowerCase();
+                if (users.some(u => u.username.toLowerCase() === usernameClean)) {
+                    showToast('El nombre de usuario ya está registrado en el estudio.', 'warning');
+                    return false;
+                }
+                const parts = userData.name.trim().split(' ').filter(p => !p.includes('.'));
+                const initials = parts.length >= 2 
+                    ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() 
+                    : userData.name.substring(0, 2).toUpperCase();
+
+                const newUser = {
+                    id: `u-${Date.now()}`,
+                    username: usernameClean,
+                    name: userData.name.trim(),
+                    role: userData.role,
+                    pass: userData.pass,
+                    avatar: initials,
+                    color: userData.color || 'bg-blue-600',
+                    isAdmin: Boolean(userData.isAdmin)
+                };
+
+                setUsers(prev => [...prev, newUser]);
+                addLog(`Creó la cuenta de usuario "${newUser.name}" (@${newUser.username}) con rol ${newUser.role}`);
+                showToast(`Usuario "${newUser.name}" creado con éxito`);
+                return true;
+            };
+
+            const handleUpdateUser = (updatedData) => {
+                const usernameClean = updatedData.username.trim().toLowerCase();
+                if (users.some(u => u.id !== updatedData.id && u.username.toLowerCase() === usernameClean)) {
+                    showToast('Ese nombre de usuario ya está siendo usado por otra persona.', 'warning');
+                    return false;
+                }
+                const parts = updatedData.name.trim().split(' ').filter(p => !p.includes('.'));
+                const initials = parts.length >= 2 
+                    ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() 
+                    : updatedData.name.substring(0, 2).toUpperCase();
+
+                const updatedUser = {
+                    ...updatedData,
+                    username: usernameClean,
+                    avatar: initials,
+                    isAdmin: Boolean(updatedData.isAdmin)
+                };
+
+                const newUsersList = users.map(u => u.id === updatedUser.id ? updatedUser : u);
+                setUsers(newUsersList);
+
+                // If admin modified their own profile, update active session!
+                if (currentUser && currentUser.id === updatedUser.id) {
+                    setCurrentUser(updatedUser);
+                }
+
+                addLog(`Actualizó el perfil y contraseña de "${updatedUser.name}" (@${updatedUser.username})`);
+                showToast(`Perfil de "${updatedUser.name}" actualizado`);
+                return true;
+            };
+
+            const handleDeleteUser = (userId) => {
+                if (currentUser && userId === currentUser.id) {
+                    showToast('No puedes eliminar tu propia cuenta en uso.', 'warning');
+                    return;
+                }
+                const target = users.find(u => u.id === userId);
+                if (!target) return;
+                if (window.confirm(`¿Está seguro de eliminar el perfil de "${target.name}" (@${target.username})? Esta acción revocará su acceso al sistema.`)) {
+                    setUsers(prev => prev.filter(u => u.id !== userId));
+                    addLog(`Eliminó al usuario "${target.name}" (@${target.username})`);
+                    showToast(`Usuario "${target.name}" eliminado del sistema`, 'info');
+                }
+            };
+
             // Calculate critical & weekly notifications
             const urgentExpedientes = useMemo(() => {
                 return expedientes.filter(exp => {
@@ -1131,7 +1221,7 @@ SERÁ JUSTICIA.`
             }, [expedientes, searchTerm, selectedFuero, selectedEstado, filterUrgency, sortBy]);
 
             if (!currentUser) {
-                return <LoginScreen onLogin={handleLogin} users={PRESET_USERS} />;
+                return <LoginScreen onLogin={handleLogin} users={users} />;
             }
 
             return (
@@ -1185,6 +1275,14 @@ SERÁ JUSTICIA.`
                                     >
                                         📚 Modelos Forenses ({LEGAL_TEMPLATES_PARAGUAY.length})
                                     </button>
+                                    {isAdmin && (
+                                        <button 
+                                            onClick={() => setActiveTab('users')}
+                                            className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'users' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
+                                        >
+                                            👥 Usuarios & Permisos ({users.length})
+                                        </button>
+                                    )}
                                     <button 
                                         onClick={() => setActiveTab('network')}
                                         className={`px-3 py-1.5 rounded-md text-sm font-medium transition ${activeTab === 'network' ? 'bg-gold-600 text-white shadow' : 'text-slate-300 hover:text-white hover:bg-navy-800'}`}
@@ -1341,6 +1439,14 @@ SERÁ JUSTICIA.`
                             >
                                 📚 Modelos
                             </button>
+                            {isAdmin && (
+                                <button 
+                                    onClick={() => setActiveTab('users')}
+                                    className={`flex-1 py-2.5 text-center font-medium border-b-2 ${activeTab === 'users' ? 'border-gold-500 text-gold-400 font-bold bg-navy-900' : 'border-transparent text-slate-400'}`}
+                                >
+                                    👥 Usuarios
+                                </button>
+                            )}
                             <button 
                                 onClick={() => setActiveTab('network')}
                                 className={`flex-1 py-2.5 text-center font-medium border-b-2 ${activeTab === 'network' ? 'border-gold-500 text-gold-400 font-bold bg-navy-900' : 'border-transparent text-slate-400'}`}
@@ -1635,10 +1741,14 @@ SERÁ JUSTICIA.`
                             <NetworkServerView 
                                 expedientes={expedientes} 
                                 auditLogs={auditLogs}
-                                onRestoreData={(newExp, newLogs) => {
+                                users={users}
+                                onRestoreData={(newExp, newLogs, newUsers) => {
                                     setExpedientes(newExp);
                                     setAuditLogs(newLogs);
-                                    showToast('Datos restaurados correctamente');
+                                    if (newUsers && Array.isArray(newUsers)) {
+                                        setUsers(newUsers);
+                                    }
+                                    showToast('Datos y perfiles restaurados correctamente');
                                 }}
                             />
                         )}
@@ -1648,6 +1758,18 @@ SERÁ JUSTICIA.`
                             <ModelosEscritosView 
                                 expedientes={expedientes}
                                 onAttachTemplate={handleAttachTemplate}
+                                showToast={showToast}
+                            />
+                        )}
+
+                        {/* TAB 6: GESTIÓN DE USUARIOS Y PERMISOS (SOLO ADMIN) */}
+                        {activeTab === 'users' && isAdmin && (
+                            <UsuariosAdminView 
+                                users={users}
+                                currentUser={currentUser}
+                                onCreateUser={handleCreateUser}
+                                onUpdateUser={handleUpdateUser}
+                                onDeleteUser={handleDeleteUser}
                                 showToast={showToast}
                             />
                         )}
@@ -1705,20 +1827,48 @@ SERÁ JUSTICIA.`
             );
         }
 
-        // --- SUB-COMPONENT: LOGIN SCREEN ---
+        // --- SUB-COMPONENT: LOGIN SCREEN (AUTENTICACIÓN SEGURA CON CONTRASEÑA) ---
         function LoginScreen({ onLogin, users }) {
+            const [selectedUser, setSelectedUser] = useState(null);
             const [username, setUsername] = useState('');
             const [password, setPassword] = useState('');
+            const [showPassword, setShowPassword] = useState(false);
             const [error, setError] = useState('');
 
-            const handleManualSubmit = (e) => {
+            const handleSelectUser = (u) => {
+                setSelectedUser(u);
+                setUsername(u.username);
+                setPassword('');
+                setError('');
+            };
+
+            const handleDeselectUser = () => {
+                setSelectedUser(null);
+                setUsername('');
+                setPassword('');
+                setError('');
+            };
+
+            const handleSubmit = (e) => {
                 e.preventDefault();
-                const found = users.find(u => u.username === username.trim() && u.pass === password.trim());
-                if (found) {
-                    onLogin(found);
-                } else {
-                    setError('Credenciales inválidas. Por favor verifique o use un acceso directo.');
+                setError('');
+
+                const cleanUser = username.trim().toLowerCase();
+                const found = users.find(u => u.username.toLowerCase() === cleanUser);
+
+                if (!found) {
+                    setError('El usuario ingresado no existe en los registros del estudio.');
+                    return;
                 }
+
+                if (found.pass !== password) {
+                    setError(`Contraseña incorrecta para "${found.name}". Verifique e intente nuevamente.`);
+                    setPassword('');
+                    return;
+                }
+
+                // Authentication Successful
+                onLogin(found);
             };
 
             return (
@@ -1733,85 +1883,147 @@ SERÁ JUSTICIA.`
                             <p className="text-xs text-slate-500">Sistema Local de Gestión de Causas y Control de Vencimientos</p>
                             <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-semibold border border-emerald-200">
                                 <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                <span>Operación 100% Offline y Local</span>
+                                <span>Acceso Protegido por Contraseña</span>
                             </div>
                         </div>
 
-                        {/* Quick One-Click Logins */}
-                        <div className="space-y-2.5">
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider text-center">
-                                Seleccione un Perfil para Ingresar
-                            </label>
-                            <div className="space-y-2">
-                                {users.map(u => (
-                                    <button
-                                        key={u.id}
-                                        type="button"
-                                        onClick={() => onLogin(u)}
-                                        className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-200 hover:border-gold-500 hover:bg-gold-50/30 transition text-left group"
-                                    >
-                                        <div className="flex items-center space-x-3">
-                                            <div className={`w-9 h-9 rounded-xl ${u.color} text-white font-bold flex items-center justify-center text-xs shadow`}>
-                                                {u.avatar}
-                                            </div>
-                                            <div>
-                                                <div className="text-sm font-bold text-navy-900 group-hover:text-gold-700 transition">
-                                                    {u.name}
+                        {/* Error Alert Box */}
+                        {error && (
+                            <div className="p-3.5 bg-red-50 text-red-700 rounded-2xl text-xs font-semibold border border-red-200 flex items-start space-x-2 animate-shake">
+                                <span className="text-base">⚠️</span>
+                                <div className="flex-1">{error}</div>
+                            </div>
+                        )}
+
+                        {/* User Selection Mode */}
+                        {!selectedUser ? (
+                            <div className="space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                                        Selecciona tu Cuenta:
+                                    </label>
+                                    <span className="text-[11px] text-slate-400 font-medium">({users.length} miembros)</span>
+                                </div>
+
+                                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                                    {users.map(u => (
+                                        <div
+                                            key={u.id}
+                                            onClick={() => handleSelectUser(u)}
+                                            className="w-full flex items-center justify-between p-3 rounded-2xl border border-slate-200 hover:border-gold-500 hover:bg-gold-50/40 transition cursor-pointer text-left group shadow-sm hover:shadow"
+                                        >
+                                            <div className="flex items-center space-x-3">
+                                                <div className={`w-10 h-10 rounded-xl ${u.color || 'bg-navy-900'} text-white font-bold flex items-center justify-center text-xs shadow`}>
+                                                    {u.avatar || u.name.substring(0,2)}
                                                 </div>
-                                                <div className="text-[11px] text-slate-500">
-                                                    {u.role}
+                                                <div>
+                                                    <div className="text-xs sm:text-sm font-bold text-navy-900 group-hover:text-gold-700 transition flex items-center space-x-1">
+                                                        <span>{u.name}</span>
+                                                        {u.isAdmin && (
+                                                            <span className="text-[10px] bg-gold-100 text-gold-800 font-bold px-1.5 py-0.2 rounded border border-gold-300">
+                                                                Admin
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-[11px] text-slate-500 font-mono">
+                                                        @{u.username} • {u.role}
+                                                    </div>
                                                 </div>
                                             </div>
+                                            <span className="text-xs font-bold text-slate-400 group-hover:text-gold-700 transition">
+                                                Ingresar &rarr;
+                                            </span>
                                         </div>
-                                        <span className="text-xs font-semibold text-navy-800 bg-slate-100 px-2.5 py-1 rounded-lg group-hover:bg-gold-600 group-hover:text-white transition">
-                                            Ingresar &rarr;
-                                        </span>
-                                    </button>
-                                ))}
+                                    ))}
+                                </div>
                             </div>
-                        </div>
+                        ) : (
+                            /* Selected User Header Box */
+                            <div className="p-3.5 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                                <div className="flex items-center space-x-3">
+                                    <div className={`w-10 h-10 rounded-xl ${selectedUser.color || 'bg-navy-900'} text-white font-bold flex items-center justify-center text-xs shadow`}>
+                                        {selectedUser.avatar || selectedUser.name.substring(0,2)}
+                                    </div>
+                                    <div>
+                                        <div className="text-xs font-bold text-navy-900 flex items-center space-x-1">
+                                            <span>{selectedUser.name}</span>
+                                            {selectedUser.isAdmin && (
+                                                <span className="text-[9px] bg-gold-100 text-gold-800 font-bold px-1.5 py-0.2 rounded">
+                                                    Admin
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="text-[11px] text-slate-500 font-mono">
+                                            @{selectedUser.username} • {selectedUser.role}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleDeselectUser}
+                                    className="text-xs text-navy-700 hover:text-navy-900 hover:underline font-semibold"
+                                >
+                                    Cambiar
+                                </button>
+                            </div>
+                        )}
 
-                        {/* Divider */}
-                        <div className="relative flex py-1 items-center">
-                            <div className="flex-grow border-t border-slate-200"></div>
-                            <span className="flex-shrink mx-3 text-slate-400 text-xs">o con usuario y contraseña</span>
-                            <div className="flex-grow border-t border-slate-200"></div>
-                        </div>
-
-                        {/* Manual Login Form */}
-                        <form onSubmit={handleManualSubmit} className="space-y-3 text-xs sm:text-sm">
-                            {error && (
-                                <div className="p-3 bg-red-50 text-red-700 rounded-xl text-xs font-medium border border-red-200">
-                                    {error}
+                        {/* Password Authentication Form */}
+                        <form onSubmit={handleSubmit} className="space-y-4 text-xs sm:text-sm">
+                            {!selectedUser && (
+                                <div>
+                                    <label className="block font-semibold text-slate-700 mb-1">Nombre de Usuario (@usuario)</label>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Ej: dr_garcia"
+                                        value={username}
+                                        onChange={(e) => { setUsername(e.target.value); setError(''); }}
+                                        className="w-full px-3.5 py-2.5 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-gold-500 text-xs font-mono"
+                                        required
+                                    />
                                 </div>
                             )}
+
                             <div>
-                                <label className="block font-semibold text-slate-700 mb-1">Usuario</label>
-                                <input 
-                                    type="text" 
-                                    placeholder="dr_garcia"
-                                    value={username}
-                                    onChange={(e) => { setUsername(e.target.value); setError(''); }}
-                                    className="w-full px-3 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-gold-500 text-xs"
-                                />
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block font-semibold text-slate-700">
+                                        {selectedUser ? `Contraseña para ${selectedUser.name.split(' ')[0]}` : 'Contraseña de Acceso'} *
+                                    </label>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="text-[11px] text-slate-500 hover:text-slate-800 font-medium"
+                                    >
+                                        {showPassword ? '🙈 Ocultar' : '👁️ Mostrar'}
+                                    </button>
+                                </div>
+                                <div className="relative">
+                                    <input 
+                                        type={showPassword ? "text" : "password"}
+                                        placeholder="••••••••"
+                                        value={password}
+                                        onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                                        className="w-full px-3.5 py-2.5 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-gold-500 text-xs pr-10"
+                                        autoFocus={Boolean(selectedUser)}
+                                        required
+                                    />
+                                    <span className="absolute right-3 top-2.5 text-slate-400">🔒</span>
+                                </div>
                             </div>
-                            <div>
-                                <label className="block font-semibold text-slate-700 mb-1">Contraseña</label>
-                                <input 
-                                    type="password" 
-                                    placeholder="••••••••"
-                                    value={password}
-                                    onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                                    className="w-full px-3 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-gold-500 text-xs"
-                                />
-                            </div>
+
                             <button
                                 type="submit"
-                                className="w-full py-2.5 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-xl text-xs shadow-md transition"
+                                className="w-full py-3 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-2xl text-xs sm:text-sm shadow-md transition flex items-center justify-center space-x-2 border border-gold-600/30"
                             >
-                                Iniciar Sesión Manual
+                                <span>Iniciar Sesión Segura</span>
+                                <span>&rarr;</span>
                             </button>
                         </form>
+
+                        {/* Security Notice */}
+                        <div className="pt-2 text-center border-t border-slate-100 text-[11px] text-slate-400">
+                            🛡️ Solo el Administrador puede crear usuarios y gestionar contraseñas.
+                        </div>
                     </div>
                 </div>
             );
@@ -1999,187 +2211,198 @@ SERÁ JUSTICIA.`
             );
         }
 
-        // --- SUB-COMPONENT: EXPEDIENTE DETAIL MODAL ---
+        // --- SUB-COMPONENT: EXPEDIENTE DETAIL MODAL (RESPONSIVE MÓVIL Y DESKTOP) ---
         function ExpedienteDetailModal({ expediente, currentUser, onClose, onOpenAddActuacion, onOpenUploadDoc, onDownloadDoc, onDeleteDoc, onChangeEstado }) {
             const [modalTab, setModalTab] = useState('actuaciones'); // 'actuaciones' or 'documentos'
             const urgency = getUrgencyInfo(expediente.fechaVencimiento);
 
             return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full p-6 space-y-5 modal-animate-in border border-slate-300 max-h-[90vh] flex flex-col">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-slate-950/75 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full p-4 sm:p-6 modal-animate-in border border-slate-300 max-h-[94vh] sm:max-h-[90vh] flex flex-col overflow-hidden">
                         
-                        {/* Header */}
-                        <div className="flex items-start justify-between border-b pb-3">
-                            <div className="space-y-1">
-                                <div className="flex items-center space-x-2">
-                                    <span className="font-mono text-xs font-bold bg-navy-900 text-gold-400 px-3 py-1 rounded-lg">
+                        {/* Header (Fixed at top) */}
+                        <div className="flex items-start justify-between border-b pb-3 flex-shrink-0">
+                            <div className="space-y-1 pr-2">
+                                <div className="flex items-center flex-wrap gap-1.5">
+                                    <span className="font-mono text-xs font-bold bg-navy-900 text-gold-400 px-2.5 py-0.5 rounded-lg">
                                         Causa N° {expediente.numeroCausa}
                                     </span>
                                     <span className="text-xs text-slate-500 font-semibold">| Fuero: {expediente.fuero}</span>
-                                    <span className={`px-2.5 py-0.5 rounded-lg text-xs ${urgency.badgeClass}`}>
+                                    <span className={`px-2 py-0.5 rounded-lg text-xs ${urgency.badgeClass}`}>
                                         {urgency.label}
                                     </span>
                                 </div>
-                                <h2 className="text-base sm:text-lg font-bold font-serif text-navy-900 leading-snug">
+                                <h2 className="text-sm sm:text-lg font-bold font-serif text-navy-900 leading-snug">
                                     {expediente.caratula}
                                 </h2>
                             </div>
-                            <button onClick={onClose} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 text-lg">
+                            <button 
+                                onClick={onClose} 
+                                className="p-1.5 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 text-lg flex-shrink-0"
+                            >
                                 ✕
                             </button>
                         </div>
 
-                        {/* Top Info Cards */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs">
-                            <div>
-                                <span className="text-slate-400 block font-semibold uppercase text-[10px]">Radicación:</span>
-                                <span className="font-bold text-slate-800">{expediente.juzgado || 'Sin Juzgado asignado'}</span>
-                                <span className="text-slate-500 block">{expediente.secretaria}</span>
-                            </div>
-                            <div>
-                                <span className="text-slate-400 block font-semibold uppercase text-[10px]">Partes Intervinientes:</span>
-                                <div className="text-slate-800"><strong>Act:</strong> {expediente.parteActora || 'N/A'}</div>
-                                <div className="text-slate-800"><strong>Dmd:</strong> {expediente.parteDemandada || 'N/A'}</div>
-                            </div>
-                            <div>
-                                <span className="text-slate-400 block font-semibold uppercase text-[10px]">Abogado & Estado:</span>
-                                <div className="font-semibold text-slate-800">{expediente.abogadoAsignado}</div>
-                                <div className="mt-1 flex items-center space-x-1.5">
-                                    <span className="text-slate-500 text-[11px]">Cambiar Estado:</span>
-                                    <select 
-                                        value={expediente.estado}
-                                        onChange={(e) => onChangeEstado(e.target.value)}
-                                        className="text-[11px] font-bold bg-white border border-slate-300 rounded px-1.5 py-0.5"
-                                    >
-                                        <option value="En Trámite">En Trámite</option>
-                                        <option value="Apelación">Apelación</option>
-                                        <option value="Con Dictamen">Con Dictamen</option>
-                                        <option value="Archivado">Archivado</option>
-                                    </select>
+                        {/* Scrollable Modal Body (Contains Info Cards + Procedure Box + Sticky Tabs + Content) */}
+                        <div className="flex-1 overflow-y-auto space-y-4 pr-1 py-3">
+
+                            {/* Top Info Cards */}
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 bg-slate-50 p-3.5 rounded-2xl border border-slate-200 text-xs">
+                                <div>
+                                    <span className="text-slate-400 block font-semibold uppercase text-[10px]">Radicación:</span>
+                                    <span className="font-bold text-slate-800">{expediente.juzgado || 'Sin Juzgado asignado'}</span>
+                                    <span className="text-slate-500 block">{expediente.secretaria}</span>
+                                </div>
+                                <div>
+                                    <span className="text-slate-400 block font-semibold uppercase text-[10px]">Partes Intervinientes:</span>
+                                    <div className="text-slate-800 truncate"><strong>Act:</strong> {expediente.parteActora || 'N/A'}</div>
+                                    <div className="text-slate-800 truncate"><strong>Dmd:</strong> {expediente.parteDemandada || 'N/A'}</div>
+                                </div>
+                                <div>
+                                    <span className="text-slate-400 block font-semibold uppercase text-[10px]">Abogado & Estado:</span>
+                                    <div className="font-semibold text-slate-800">{expediente.abogadoAsignado}</div>
+                                    <div className="mt-1 flex items-center space-x-1.5">
+                                        <span className="text-slate-500 text-[11px]">Estado:</span>
+                                        <select 
+                                            value={expediente.estado}
+                                            onChange={(e) => onChangeEstado(e.target.value)}
+                                            className="text-[11px] font-bold bg-white border border-slate-300 rounded px-1.5 py-0.5"
+                                        >
+                                            <option value="En Trámite">En Trámite</option>
+                                            <option value="Apelación">Apelación</option>
+                                            <option value="Con Dictamen">Con Dictamen</option>
+                                            <option value="Archivado">Archivado</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        {/* Critical Procedure Highlight Box */}
-                        <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <div className="space-y-0.5">
-                                <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 flex items-center space-x-1">
-                                    <span>⏱️ PRÓXIMO TRÁMITE CON PLAZO LEGAL:</span>
+                            {/* Critical Procedure Highlight Box */}
+                            <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                                <div className="space-y-0.5">
+                                    <span className="text-[10px] font-black uppercase tracking-wider text-amber-800 flex items-center space-x-1">
+                                        <span>⏱️ PRÓXIMO TRÁMITE CON PLAZO LEGAL:</span>
+                                    </span>
+                                    <div className="text-xs sm:text-sm font-bold text-slate-900">{expediente.proximoTramite}</div>
+                                    <div className="text-xs text-slate-600">Fecha límite fijada: <strong>{expediente.fechaVencimiento}</strong></div>
+                                </div>
+                                <span className={`px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap self-start sm:self-auto ${urgency.badgeClass}`}>
+                                    {urgency.label}
                                 </span>
-                                <div className="text-sm font-bold text-slate-900">{expediente.proximoTramite}</div>
-                                <div className="text-xs text-slate-600">Fecha límite fijada: <strong>{expediente.fechaVencimiento}</strong></div>
                             </div>
-                            <span className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap self-start sm:self-auto ${urgency.badgeClass}`}>
-                                {urgency.label}
-                            </span>
-                        </div>
 
-                        {/* Modal Tab Switcher */}
-                        <div className="flex border-b border-slate-200 space-x-4 text-xs font-bold">
-                            <button
-                                onClick={() => setModalTab('actuaciones')}
-                                className={`pb-2.5 border-b-2 transition flex items-center space-x-1.5 ${modalTab === 'actuaciones' ? 'border-navy-900 text-navy-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                            >
-                                <span>📜 Historial de Actuaciones ({expediente.actuaciones ? expediente.actuaciones.length : 0})</span>
-                            </button>
-                            <button
-                                onClick={() => setModalTab('documentos')}
-                                className={`pb-2.5 border-b-2 transition flex items-center space-x-1.5 ${modalTab === 'documentos' ? 'border-navy-900 text-navy-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
-                            >
-                                <span>📁 Expediente Digital & Documentos ({expediente.documentos ? expediente.documentos.length : 0})</span>
-                            </button>
-                        </div>
+                            {/* Sticky Modal Tabs */}
+                            <div className="sticky top-0 bg-white z-10 pt-1 pb-2 flex border-b border-slate-200 space-x-3 text-xs font-bold shadow-sm">
+                                <button
+                                    onClick={() => setModalTab('actuaciones')}
+                                    className={`pb-2 border-b-2 transition flex items-center space-x-1.5 ${modalTab === 'actuaciones' ? 'border-navy-900 text-navy-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    <span>📜 Actuaciones ({expediente.actuaciones ? expediente.actuaciones.length : 0})</span>
+                                </button>
+                                <button
+                                    onClick={() => setModalTab('documentos')}
+                                    className={`pb-2 border-b-2 transition flex items-center space-x-1.5 ${modalTab === 'documentos' ? 'border-navy-900 text-navy-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    <span>📁 Documentos ({expediente.documentos ? expediente.documentos.length : 0})</span>
+                                </button>
+                            </div>
 
-                        {/* Modal Tab Content Area */}
-                        <div className="flex-1 overflow-y-auto pr-1">
-                            {modalTab === 'actuaciones' && (
-                                <div className="space-y-3">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <h4 className="text-xs font-bold uppercase text-slate-500">Actuaciones y Providencias Registradas</h4>
-                                        <button 
-                                            onClick={onOpenAddActuacion}
-                                            className="px-3 py-1.5 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-xl text-xs transition flex items-center space-x-1"
-                                        >
-                                            <span>➕</span>
-                                            <span>Agregar Actuación</span>
-                                        </button>
-                                    </div>
-
-                                    {(!expediente.actuaciones || expediente.actuaciones.length === 0) ? (
-                                        <div className="text-center p-6 text-slate-400 text-xs">No hay actuaciones registradas en este expediente.</div>
-                                    ) : (
-                                        <div className="space-y-2.5">
-                                            {expediente.actuaciones.map(act => (
-                                                <div key={act.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
-                                                    <div className="flex items-center justify-between text-slate-500">
-                                                        <span className="font-mono font-bold text-navy-900 bg-white px-2 py-0.5 rounded border border-slate-200">{act.fecha}</span>
-                                                        <span className="text-[11px] font-medium text-slate-600">Por: {act.usuario}</span>
-                                                    </div>
-                                                    <div className="font-bold text-slate-900 text-xs sm:text-sm">{act.titulo}</div>
-                                                    <p className="text-slate-600 text-xs">{act.detalle}</p>
-                                                </div>
-                                            ))}
+                            {/* Modal Tab Content Area */}
+                            <div>
+                                {modalTab === 'actuaciones' && (
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <h4 className="text-xs font-bold uppercase text-slate-500">Historial Procesal</h4>
+                                            <button 
+                                                onClick={onOpenAddActuacion}
+                                                className="px-3 py-1.5 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-xl text-xs transition flex items-center space-x-1 shadow-sm"
+                                            >
+                                                <span>➕</span>
+                                                <span>Agregar Actuación</span>
+                                            </button>
                                         </div>
-                                    )}
-                                </div>
-                            )}
 
-                            {modalTab === 'documentos' && (
-                                <div className="space-y-3">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <h4 className="text-xs font-bold uppercase text-slate-500">Archivos y Piezas Adjuntas</h4>
-                                        <button 
-                                            onClick={onOpenUploadDoc}
-                                            className="px-3 py-1.5 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-xl text-xs transition flex items-center space-x-1"
-                                        >
-                                            <span>📤</span>
-                                            <span>Subir Documento</span>
-                                        </button>
+                                        {(!expediente.actuaciones || expediente.actuaciones.length === 0) ? (
+                                            <div className="text-center p-6 text-slate-400 text-xs bg-slate-50 rounded-2xl border border-slate-200">
+                                                No hay actuaciones registradas en este expediente.
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2.5">
+                                                {expediente.actuaciones.map(act => (
+                                                    <div key={act.id} className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+                                                        <div className="flex items-center justify-between text-slate-500 flex-wrap gap-1">
+                                                            <span className="font-mono font-bold text-navy-900 bg-white px-2 py-0.5 rounded border border-slate-200">{act.fecha}</span>
+                                                            <span className="text-[11px] font-medium text-slate-600">Por: {act.usuario}</span>
+                                                        </div>
+                                                        <div className="font-bold text-slate-900 text-xs sm:text-sm">{act.titulo}</div>
+                                                        <p className="text-slate-600 text-xs">{act.detalle}</p>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
                                     </div>
+                                )}
 
-                                    {(!expediente.documentos || expediente.documentos.length === 0) ? (
-                                        <div className="text-center p-6 text-slate-400 text-xs">No hay documentos adjuntos. Haga clic en Subir Documento para adjuntar escritos o pruebas.</div>
-                                    ) : (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            {expediente.documentos.map(doc => (
-                                                <div key={doc.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between group hover:border-gold-400 transition">
-                                                    <div className="flex items-center space-x-3 overflow-hidden">
-                                                        <span className="text-2xl flex-shrink-0">
-                                                            {doc.nombre.endsWith('.pdf') ? '📄' : doc.nombre.endsWith('.docx') ? '📝' : '📊'}
-                                                        </span>
-                                                        <div className="truncate">
-                                                            <div className="text-xs font-bold text-slate-800 truncate" title={doc.nombre}>{doc.nombre}</div>
-                                                            <div className="text-[10px] text-slate-400 font-medium">
-                                                                {doc.tipo} • {doc.tamaño} • {doc.fecha}
+                                {modalTab === 'documentos' && (
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <h4 className="text-xs font-bold uppercase text-slate-500">Documentos Adjuntos ({expediente.documentos ? expediente.documentos.length : 0})</h4>
+                                            <button 
+                                                onClick={onOpenUploadDoc}
+                                                className="px-3 py-1.5 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-xl text-xs transition flex items-center space-x-1 shadow-sm"
+                                            >
+                                                <span>📤</span>
+                                                <span>Subir Documento</span>
+                                            </button>
+                                        </div>
+
+                                        {(!expediente.documentos || expediente.documentos.length === 0) ? (
+                                            <div className="text-center p-6 text-slate-400 text-xs bg-slate-50 rounded-2xl border border-slate-200">
+                                                No hay documentos adjuntos. Presiona "Subir Documento" para adjuntar un escrito o prueba.
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                                {expediente.documentos.map(doc => (
+                                                    <div key={doc.id} className="p-3 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between group hover:border-gold-400 transition shadow-sm">
+                                                        <div className="flex items-center space-x-2.5 overflow-hidden flex-1 pr-2">
+                                                            <span className="text-2xl flex-shrink-0">
+                                                                {doc.nombre.endsWith('.pdf') ? '📄' : doc.nombre.endsWith('.docx') || doc.nombre.endsWith('.doc') ? '📝' : '📊'}
+                                                            </span>
+                                                            <div className="truncate">
+                                                                <div className="text-xs font-bold text-slate-800 truncate" title={doc.nombre}>{doc.nombre}</div>
+                                                                <div className="text-[10px] text-slate-500 font-medium">
+                                                                    {doc.tipo} • {doc.tamaño} • {doc.fecha}
+                                                                </div>
                                                             </div>
                                                         </div>
+                                                        <div className="flex items-center space-x-1 flex-shrink-0">
+                                                            <button 
+                                                                onClick={() => onDownloadDoc(doc, expediente.numeroCausa)}
+                                                                className="px-2.5 py-1.5 bg-navy-900 hover:bg-navy-800 text-gold-400 rounded-lg text-xs transition font-bold flex items-center space-x-1 shadow"
+                                                                title="Visualizar / Descargar"
+                                                            >
+                                                                <span>👁️ Ver</span>
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => onDeleteDoc(doc.id, doc.nombre)}
+                                                                className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg text-xs transition"
+                                                                title="Eliminar Documento"
+                                                            >
+                                                                🗑️
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                    <div className="flex items-center space-x-1 flex-shrink-0">
-                                                        <button 
-                                                            onClick={() => onDownloadDoc(doc, expediente.numeroCausa)}
-                                                            className="p-1.5 hover:bg-navy-900 hover:text-gold-400 text-slate-600 rounded-lg text-xs transition font-semibold"
-                                                            title="Visualizar / Descargar"
-                                                        >
-                                                            👁️ Ver
-                                                        </button>
-                                                        <button 
-                                                            onClick={() => onDeleteDoc(doc.id, doc.nombre)}
-                                                            className="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg text-xs transition"
-                                                            title="Eliminar Documento"
-                                                        >
-                                                            🗑️
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                            )}
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
-                        {/* Footer */}
-                        <div className="border-t pt-3 flex justify-end">
+                        {/* Footer (Fixed at bottom) */}
+                        <div className="border-t pt-3 flex justify-end flex-shrink-0">
                             <button 
                                 onClick={onClose}
                                 className="px-5 py-2 bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-300 transition"
@@ -2187,6 +2410,10 @@ SERÁ JUSTICIA.`
                                 Cerrar
                             </button>
                         </div>
+                    </div>
+                </div>
+            );
+        }
                     </div>
                 </div>
             );
@@ -2347,28 +2574,28 @@ SERÁ JUSTICIA.`
         // --- SUB-COMPONENT: DOCUMENT VIEWER MODAL ---
         function DocumentViewerModal({ doc, onClose }) {
             return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-slate-950/80 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full p-6 space-y-4 modal-animate-in border border-slate-300 max-h-[90vh] flex flex-col">
-                        <div className="flex items-center justify-between border-b pb-3">
-                            <div className="flex items-center space-x-2">
-                                <span className="text-2xl">📄</span>
-                                <div>
-                                    <h3 className="text-base font-bold font-serif text-navy-900 leading-none">{doc.nombre}</h3>
-                                    <p className="text-xs text-slate-500 mt-1">{doc.tipo} • {doc.tamaño} • Subido por: {doc.subidoPor}</p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-slate-950/80 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-3xl w-full p-4 sm:p-6 space-y-3.5 modal-animate-in border border-slate-300 max-h-[94vh] sm:max-h-[90vh] flex flex-col">
+                        <div className="flex items-center justify-between border-b pb-3 flex-shrink-0">
+                            <div className="flex items-center space-x-2.5 overflow-hidden pr-2">
+                                <span className="text-2xl flex-shrink-0">📄</span>
+                                <div className="truncate">
+                                    <h3 className="text-sm sm:text-base font-bold font-serif text-navy-900 leading-none truncate" title={doc.nombre}>{doc.nombre}</h3>
+                                    <p className="text-[11px] text-slate-500 mt-1 truncate">{doc.tipo} • {doc.tamaño} • Subido por: {doc.subidoPor}</p>
                                 </div>
                             </div>
-                            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+                            <button onClick={onClose} className="p-1 text-slate-400 hover:text-slate-600 text-lg flex-shrink-0">✕</button>
                         </div>
 
                         {/* Simulated Document Preview */}
-                        <div className="flex-1 bg-slate-100 p-6 rounded-2xl border border-slate-300 overflow-y-auto space-y-4 font-serif text-slate-800 text-xs sm:text-sm shadow-inner">
-                            <div className="text-center font-bold text-base text-navy-900 border-b border-slate-300 pb-3">
+                        <div className="flex-1 bg-slate-100 p-4 sm:p-6 rounded-2xl border border-slate-300 overflow-y-auto space-y-3.5 font-serif text-slate-800 text-xs sm:text-sm shadow-inner">
+                            <div className="text-center font-bold text-xs sm:text-sm text-navy-900 border-b border-slate-300 pb-2.5">
                                 EXPEDIENTE DIGITAL - REPRODUCCIÓN FIDELINA
                             </div>
-                            <div className="bg-white p-6 rounded-xl shadow border border-slate-200 space-y-3">
-                                <div className="text-right text-xs text-slate-500 font-sans">Fecha de certificación: {doc.fecha}</div>
-                                <div className="font-bold text-center text-sm uppercase text-slate-700">DOCUMENTO: {doc.nombre}</div>
-                                <div className="leading-relaxed text-justify whitespace-pre-line text-slate-700 bg-slate-50 p-3.5 rounded-lg border border-slate-200 font-sans text-xs">
+                            <div className="bg-white p-4 sm:p-6 rounded-xl shadow-sm border border-slate-200 space-y-3">
+                                <div className="text-right text-[11px] text-slate-500 font-sans">Fecha de certificación: {doc.fecha}</div>
+                                <div className="font-bold text-center text-xs sm:text-sm uppercase text-slate-700">{doc.nombre}</div>
+                                <div className="leading-relaxed text-justify whitespace-pre-line text-slate-700 bg-slate-50 p-3 sm:p-3.5 rounded-lg border border-slate-200 font-sans text-xs">
                                     {doc.contenidoPreview ? (
                                         <div>
                                             <div className="font-bold text-navy-900 mb-1.5 flex items-center space-x-1">
@@ -2380,29 +2607,29 @@ SERÁ JUSTICIA.`
                                         <p>Por medio del presente instrumento judicial se deja constancia de la digitalización e incorporación al sistema local de la pieza denominada <strong>{doc.nombre}</strong> clasificada bajo el tipo <strong>{doc.tipo}</strong>.</p>
                                     )}
                                 </div>
-                                <p className="leading-relaxed text-justify text-slate-600">
+                                <p className="leading-relaxed text-justify text-slate-600 text-[11px] sm:text-xs">
                                     El presente archivo se encuentra resguardado bajo estándares de integridad y trazabilidad en el servidor de expedientes del estudio jurídico.
                                 </p>
-                                <div className="pt-6 border-t border-slate-200 text-right text-xs font-sans text-slate-500">
+                                <div className="pt-4 border-t border-slate-200 text-right text-[11px] font-sans text-slate-500">
                                     Firma Digitalizada / Registrado por: <strong>{doc.subidoPor}</strong>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="flex items-center justify-between pt-2 border-t">
-                            <span className="text-xs text-emerald-600 font-semibold flex items-center space-x-1">
-                                <span>🔒 Archivo verificado localmente</span>
+                        <div className="flex items-center justify-between pt-2 border-t flex-shrink-0">
+                            <span className="text-[11px] text-emerald-600 font-semibold flex items-center space-x-1">
+                                <span>🔒 Verificado</span>
                             </span>
                             <div className="flex space-x-2">
                                 <button 
                                     onClick={() => alert(`Simulando descarga local de: ${doc.nombre}`)}
-                                    className="px-4 py-2 bg-navy-900 text-gold-400 font-bold rounded-xl text-xs shadow hover:bg-navy-800 transition"
+                                    className="px-3.5 py-1.5 bg-navy-900 text-gold-400 font-bold rounded-xl text-xs shadow hover:bg-navy-800 transition"
                                 >
-                                    📥 Descargar Archivo
+                                    📥 Descargar
                                 </button>
                                 <button 
                                     onClick={onClose}
-                                    className="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-300"
+                                    className="px-3.5 py-1.5 bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-300"
                                 >
                                     Cerrar
                                 </button>
@@ -2517,13 +2744,14 @@ SERÁ JUSTICIA.`
         }
 
         // --- SUB-COMPONENT: NETWORK & BACKUP SERVER VIEW ---
-        function NetworkServerView({ expedientes, auditLogs, onRestoreData }) {
+        function NetworkServerView({ expedientes, auditLogs, users, onRestoreData }) {
             const fileInputRef = useRef(null);
 
             const handleExportBackup = () => {
                 const data = {
                     version: '2.0',
                     fechaExportacion: new Date().toISOString(),
+                    users: users || [],
                     expedientes,
                     auditLogs
                 };
@@ -2544,7 +2772,7 @@ SERÁ JUSTICIA.`
                     try {
                         const parsed = JSON.parse(event.target.result);
                         if (parsed.expedientes && Array.isArray(parsed.expedientes)) {
-                            onRestoreData(parsed.expedientes, parsed.auditLogs || []);
+                            onRestoreData(parsed.expedientes, parsed.auditLogs || [], parsed.users || null);
                         } else {
                             alert('El archivo no contiene un formato de respaldo válido de LexLocal.');
                         }
@@ -2938,6 +3166,416 @@ SERÁ JUSTICIA.`
                             </div>
                         </div>
                     )}
+                </div>
+            );
+        }
+
+        // --- SUB-COMPONENT: GESTIÓN DE USUARIOS Y PERMISOS (ADMIN) ---
+        function UsuariosAdminView({ users, currentUser, onCreateUser, onUpdateUser, onDeleteUser, showToast }) {
+            const [isModalOpen, setIsModalOpen] = useState(false);
+            const [userToEdit, setUserToEdit] = useState(null);
+            const [visiblePasswords, setVisiblePasswords] = useState({});
+            const [searchTerm, setSearchTerm] = useState('');
+
+            const togglePasswordVisibility = (userId) => {
+                setVisiblePasswords(prev => ({ ...prev, [userId]: !prev[userId] }));
+            };
+
+            const handleOpenCreate = () => {
+                setUserToEdit(null);
+                setIsModalOpen(true);
+            };
+
+            const handleOpenEdit = (u) => {
+                setUserToEdit(u);
+                setIsModalOpen(true);
+            };
+
+            const handleSaveModal = (formData) => {
+                let success = false;
+                if (userToEdit) {
+                    success = onUpdateUser({ ...userToEdit, ...formData });
+                } else {
+                    success = onCreateUser(formData);
+                }
+                if (success) {
+                    setIsModalOpen(false);
+                }
+            };
+
+            const filteredUsers = users.filter(u => 
+                u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                u.role.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+
+            const adminCount = users.filter(u => u.isAdmin || (u.role && u.role.toLowerCase().includes('admin'))).length;
+
+            return (
+                <div className="space-y-6">
+                    {/* Header */}
+                    <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200 shadow-sm space-y-5">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                            <div>
+                                <div className="flex items-center space-x-2">
+                                    <span className="text-2xl">👥</span>
+                                    <h2 className="text-xl sm:text-2xl font-bold font-serif text-navy-900">
+                                        Administración de Usuarios, Perfiles y Contraseñas
+                                    </h2>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Panel exclusivo del Administrador para crear nuevos miembros del estudio, modificar roles y asignar contraseñas de acceso.
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={handleOpenCreate}
+                                className="px-5 py-2.5 bg-navy-900 hover:bg-navy-800 text-gold-400 font-bold rounded-2xl text-xs sm:text-sm shadow-md transition flex items-center space-x-2 border border-gold-600/30 whitespace-nowrap self-start sm:self-auto"
+                            >
+                                <span>➕</span>
+                                <span>Crear Nuevo Usuario</span>
+                            </button>
+                        </div>
+
+                        {/* Stats Bar */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 border-t border-slate-100">
+                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 flex items-center justify-between">
+                                <div>
+                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Cuentas Registradas</span>
+                                    <div className="text-xl font-bold text-navy-900 font-serif">{users.length} miembros</div>
+                                </div>
+                                <span className="text-2xl">👥</span>
+                            </div>
+
+                            <div className="p-4 bg-gold-50/70 rounded-2xl border border-gold-200 flex items-center justify-between">
+                                <div>
+                                    <span className="text-[10px] font-bold text-gold-800 uppercase tracking-wider">Administradores</span>
+                                    <div className="text-xl font-bold text-gold-900 font-serif">{adminCount} con acceso total</div>
+                                </div>
+                                <span className="text-2xl">🛡️</span>
+                            </div>
+
+                            <div className="p-4 bg-blue-50/70 rounded-2xl border border-blue-200 flex items-center justify-between">
+                                <div>
+                                    <span className="text-[10px] font-bold text-blue-800 uppercase tracking-wider">Tu Sesión Actual</span>
+                                    <div className="text-sm font-bold text-blue-950 truncate max-w-[180px]">{currentUser.name}</div>
+                                    <span className="text-[11px] text-blue-700 font-mono">@{currentUser.username}</span>
+                                </div>
+                                <button
+                                    onClick={() => handleOpenEdit(currentUser)}
+                                    className="px-2.5 py-1 bg-white hover:bg-blue-100 text-blue-900 text-xs font-bold rounded-lg border border-blue-300 shadow-sm transition"
+                                >
+                                    Editar Mi Perfil
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Quick Search */}
+                        <div className="pt-2">
+                            <input 
+                                type="text"
+                                placeholder="Buscar miembro por nombre, usuario (@) o rol..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="w-full pl-4 pr-4 py-2.5 rounded-2xl border border-slate-200 text-xs focus:ring-2 focus:ring-gold-500 bg-slate-50"
+                            />
+                        </div>
+                    </div>
+
+                    {/* Users Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                        {filteredUsers.map(u => {
+                            const isMe = currentUser && currentUser.id === u.id;
+                            const isPasswordVisible = Boolean(visiblePasswords[u.id]);
+
+                            return (
+                                <div 
+                                    key={u.id}
+                                    className={`bg-white rounded-3xl p-5 border transition-all flex flex-col justify-between shadow-sm hover:shadow-md ${isMe ? 'border-gold-400 ring-2 ring-gold-100' : 'border-slate-200'}`}
+                                >
+                                    <div className="space-y-4">
+                                        {/* Top Header */}
+                                        <div className="flex items-start justify-between">
+                                            <div className="flex items-center space-x-3">
+                                                <div className={`w-12 h-12 rounded-2xl ${u.color || 'bg-navy-900'} text-white font-bold flex items-center justify-center text-sm shadow-md`}>
+                                                    {u.avatar || u.name.substring(0, 2)}
+                                                </div>
+                                                <div>
+                                                    <div className="font-bold text-slate-900 text-sm leading-snug flex items-center space-x-1.5">
+                                                        <span>{u.name}</span>
+                                                        {isMe && (
+                                                            <span className="bg-gold-100 text-gold-900 text-[9px] font-black px-1.5 py-0.5 rounded uppercase">
+                                                                Tú
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-slate-400 font-mono">
+                                                        @{u.username}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <span className={`text-[10px] font-bold px-2.5 py-1 rounded-xl ${u.isAdmin ? 'bg-gold-50 text-gold-800 border border-gold-300' : 'bg-slate-100 text-slate-600'}`}>
+                                                {u.isAdmin ? '🛡️ Admin' : '👤 Operador'}
+                                            </span>
+                                        </div>
+
+                                        {/* Role Pill */}
+                                        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-1">
+                                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Cargo / Función:</div>
+                                            <div className="text-xs font-semibold text-slate-800">{u.role}</div>
+                                        </div>
+
+                                        {/* Assigned Password Box */}
+                                        <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 flex items-center justify-between">
+                                            <div>
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Contraseña Asignada:</div>
+                                                <div className="text-xs font-mono font-bold text-navy-900 mt-0.5">
+                                                    {isPasswordVisible ? u.pass : '••••••••••••'}
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => togglePasswordVisibility(u.id)}
+                                                className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 font-medium hover:bg-slate-200 rounded-lg transition"
+                                                title="Mostrar/Ocultar contraseña"
+                                            >
+                                                {isPasswordVisible ? '🙈 Ocultar' : '👁️ Ver'}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between gap-2">
+                                        <button
+                                            onClick={() => handleOpenEdit(u)}
+                                            className="flex-1 py-2 bg-navy-900 hover:bg-navy-800 text-gold-400 text-xs font-bold rounded-xl transition shadow-sm text-center"
+                                        >
+                                            ✏️ Editar Perfil & Clave
+                                        </button>
+
+                                        {!isMe ? (
+                                            <button
+                                                onClick={() => onDeleteUser(u.id)}
+                                                className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition"
+                                                title="Eliminar este usuario"
+                                            >
+                                                🗑️
+                                            </button>
+                                        ) : (
+                                            <span className="text-[10px] text-slate-400 font-medium px-2 py-1 bg-slate-100 rounded-lg">
+                                                Activo
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* USER EDIT / CREATE MODAL */}
+                    {isModalOpen && (
+                        <UserModal
+                            userToEdit={userToEdit}
+                            isCurrentUser={Boolean(userToEdit && currentUser && userToEdit.id === currentUser.id)}
+                            onClose={() => setIsModalOpen(false)}
+                            onSave={handleSaveModal}
+                        />
+                    )}
+                </div>
+            );
+        }
+
+        // --- MODAL: CREAR O EDITAR USUARIO ---
+        function UserModal({ userToEdit, isCurrentUser, onClose, onSave }) {
+            const isEditing = Boolean(userToEdit);
+
+            const [name, setName] = useState(userToEdit ? userToEdit.name : '');
+            const [username, setUsername] = useState(userToEdit ? userToEdit.username : '');
+            const [pass, setPass] = useState(userToEdit ? userToEdit.pass : '');
+            const [showPass, setShowPass] = useState(false);
+            const [role, setRole] = useState(userToEdit ? userToEdit.role : 'Abogado Asociado');
+            const [isAdmin, setIsAdmin] = useState(userToEdit ? Boolean(userToEdit.isAdmin) : false);
+            const [color, setColor] = useState(userToEdit && userToEdit.color ? userToEdit.color : 'bg-blue-600');
+            const [error, setError] = useState('');
+
+            const colorOptions = [
+                { name: 'Dorado (Admin)', val: 'bg-gold-600', ring: 'ring-amber-500' },
+                { name: 'Azul Legal', val: 'bg-blue-600', ring: 'ring-blue-500' },
+                { name: 'Verde Esmeralda', val: 'bg-emerald-600', ring: 'ring-emerald-500' },
+                { name: 'Púrpura Judicial', val: 'bg-purple-600', ring: 'ring-purple-500' },
+                { name: 'Índigo Navy', val: 'bg-navy-900', ring: 'ring-slate-900' },
+                { name: 'Rojo Carmesí', val: 'bg-rose-600', ring: 'ring-rose-500' }
+            ];
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                setError('');
+
+                if (!name.trim()) {
+                    setError('Por favor ingrese el nombre y apellido.');
+                    return;
+                }
+                if (!username.trim()) {
+                    setError('Por favor ingrese el nombre de usuario.');
+                    return;
+                }
+                if (!pass.trim() || pass.length < 4) {
+                    setError('La contraseña debe tener al menos 4 caracteres.');
+                    return;
+                }
+
+                onSave({
+                    name: name.trim(),
+                    username: username.trim().toLowerCase(),
+                    pass: pass.trim(),
+                    role,
+                    isAdmin: isCurrentUser ? true : isAdmin, // Prevent locking oneself out
+                    color
+                });
+            };
+
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm overflow-y-auto">
+                    <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full p-6 space-y-4 modal-animate-in border border-slate-300">
+                        {/* Header */}
+                        <div className="flex items-center justify-between border-b pb-3">
+                            <div className="flex items-center space-x-2">
+                                <span className="text-xl">{isEditing ? '✏️' : '➕'}</span>
+                                <h3 className="text-base sm:text-lg font-bold font-serif text-navy-900">
+                                    {isEditing ? (isCurrentUser ? 'Editar Tu Propio Perfil & Clave' : `Editar a: ${userToEdit.name}`) : 'Registrar Nuevo Miembro'}
+                                </h3>
+                            </div>
+                            <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg">✕</button>
+                        </div>
+
+                        {error && (
+                            <div className="p-3 bg-red-50 text-red-700 rounded-xl text-xs font-semibold border border-red-200">
+                                ⚠️ {error}
+                            </div>
+                        )}
+
+                        <form onSubmit={handleSubmit} className="space-y-3.5 text-xs sm:text-sm">
+                            {/* Nombre Completo */}
+                            <div>
+                                <label className="block font-semibold text-slate-700 mb-1">Nombre Completo *</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Ej: Dr. Juan Centurión"
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-gold-500 text-xs"
+                                    required
+                                />
+                            </div>
+
+                            {/* Username */}
+                            <div>
+                                <label className="block font-semibold text-slate-700 mb-1">Nombre de Usuario (@usuario) *</label>
+                                <input 
+                                    type="text" 
+                                    placeholder="Ej: dr_centurion"
+                                    value={username}
+                                    onChange={(e) => setUsername(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-gold-500 text-xs font-mono"
+                                    required
+                                />
+                            </div>
+
+                            {/* Contraseña */}
+                            <div>
+                                <div className="flex justify-between items-center mb-1">
+                                    <label className="block font-semibold text-slate-700">Contraseña de Acceso *</label>
+                                    <button 
+                                        type="button"
+                                        onClick={() => setShowPass(!showPass)}
+                                        className="text-[11px] text-slate-500 hover:text-slate-800"
+                                    >
+                                        {showPass ? '🙈 Ocultar' : '👁️ Mostrar'}
+                                    </button>
+                                </div>
+                                <input 
+                                    type={showPass ? "text" : "password"} 
+                                    placeholder="Defina la clave de acceso"
+                                    value={pass}
+                                    onChange={(e) => setPass(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-gold-500 text-xs font-mono"
+                                    required
+                                />
+                            </div>
+
+                            {/* Cargo / Rol */}
+                            <div>
+                                <label className="block font-semibold text-slate-700 mb-1">Cargo / Rol en el Estudio</label>
+                                <select 
+                                    value={role}
+                                    onChange={(e) => setRole(e.target.value)}
+                                    className="w-full px-3 py-2 border rounded-xl bg-slate-50 focus:ring-2 focus:ring-gold-500 text-xs"
+                                >
+                                    <option value="Abogado Senior / Admin">Abogado Senior / Administrador</option>
+                                    <option value="Abogada Asociada">Abogada Asociada</option>
+                                    <option value="Abogado Litigante">Abogado Litigante</option>
+                                    <option value="Asistente Jurídico">Asistente Jurídico</option>
+                                    <option value="Procurador Judicial">Procurador Judicial</option>
+                                    <option value="Pasante de Derecho">Pasante de Derecho</option>
+                                </select>
+                            </div>
+
+                            {/* Permiso de Administrador */}
+                            <div className="p-3 bg-slate-50 rounded-2xl border border-slate-200 space-y-1">
+                                <label className="flex items-center space-x-2.5 cursor-pointer">
+                                    <input 
+                                        type="checkbox"
+                                        checked={isCurrentUser ? true : isAdmin}
+                                        disabled={isCurrentUser}
+                                        onChange={(e) => setIsAdmin(e.target.checked)}
+                                        className="w-4 h-4 text-gold-600 rounded focus:ring-gold-500"
+                                    />
+                                    <span className="font-bold text-xs text-slate-800">
+                                        Otorgar Privilegios de Administrador
+                                    </span>
+                                </label>
+                                <p className="text-[11px] text-slate-500 pl-6">
+                                    {isCurrentUser 
+                                        ? 'No puedes quitarte el rol de Administrador a ti mismo para evitar bloqueos del sistema.' 
+                                        : 'Permite crear nuevos expedientes, editar usuarios, ver contraseñas y administrar la base de datos.'}
+                                </p>
+                            </div>
+
+                            {/* Color de Avatar */}
+                            <div>
+                                <label className="block font-semibold text-slate-700 mb-1.5">Color de Distintivo:</label>
+                                <div className="flex items-center space-x-3">
+                                    {colorOptions.map(c => (
+                                        <button
+                                            key={c.val}
+                                            type="button"
+                                            onClick={() => setColor(c.val)}
+                                            className={`w-7 h-7 rounded-full ${c.val} transition-transform ${color === c.val ? 'ring-2 ring-offset-2 ring-gold-500 scale-110 shadow' : 'opacity-80 hover:opacity-100'}`}
+                                            title={c.name}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex justify-end space-x-2 pt-3 border-t">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="px-4 py-2 bg-slate-200 text-slate-700 font-semibold rounded-xl text-xs hover:bg-slate-300"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-5 py-2 bg-navy-900 text-gold-400 font-bold rounded-xl text-xs shadow hover:bg-navy-800 transition"
+                                >
+                                    {isEditing ? 'Guardar Cambios' : 'Crear Usuario'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             );
         }
