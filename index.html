@@ -15,6 +15,34 @@
         if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
             navigator.serviceWorker.register('./sw.js').catch(() => {});
         }
+        function showRecoveryNotice(msg) {
+            var existing = document.getElementById('lexlocal-recovery');
+            if (existing) return;
+            var errBox = document.createElement('div');
+            errBox.id = 'lexlocal-recovery';
+            errBox.style.cssText = 'max-width:500px;margin:30px auto;padding:24px;background:#ffffff;border:1px solid #cbd5e1;border-radius:24px;box-shadow:0 20px 40px rgba(0,0,0,0.18);font-family:sans-serif;color:#1e293b;text-align:center;position:relative;z-index:99999;';
+            errBox.innerHTML = '<div style="font-size:38px;margin-bottom:12px;">⚖️</div>' +
+                '<h3 style="font-size:18px;font-weight:bold;color:#0b1b2b;margin-bottom:8px;">Recuperación del Sistema LexLocal</h3>' +
+                '<p style="font-size:13px;color:#64748b;margin-bottom:16px;line-height:1.5;">' + (msg || 'Se detectó una demora o conflicto de caché en el navegador. Haz clic en el botón para restaurar los datos seguros y reiniciar el sistema.') + '</p>' +
+                '<button onclick="localStorage.clear();location.reload();" style="padding:11px 24px;background:#0b1b2b;color:#fbbf24;font-weight:bold;border:none;border-radius:12px;cursor:pointer;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,0.15);">Restablecer Memoria y Recargar</button>';
+            var root = document.getElementById('root');
+            if (root) {
+                root.innerHTML = '';
+                root.appendChild(errBox);
+            } else if (document.body) {
+                document.body.appendChild(errBox);
+            }
+        }
+        window.addEventListener('error', function(e) {
+            console.error('LexLocal Error capturado:', e);
+            showRecoveryNotice('Error al iniciar: ' + (e.message || 'Conflicto de script'));
+        });
+        setTimeout(function() {
+            var loader = document.querySelector('.lex-loading-screen');
+            if (loader) {
+                showRecoveryNotice('El sistema está demorando en cargar sus componentes. Puedes reiniciar la memoria local con el siguiente botón:');
+            }
+        }, 5000);
     </script>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -79,7 +107,14 @@
     </style>
 </head>
 <body class="bg-slate-100 font-sans text-slate-800 antialiased selection:bg-gold-500 selection:text-white">
-    <div id="root"></div>
+    <div id="root">
+        <div class="lex-loading-screen" style="min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; background-color: #0b1b2b; color: #f8fafc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 20px;">
+            <div style="width: 48px; height: 48px; border: 4px solid #d97706; border-top-color: transparent; border-radius: 50%; animation: lexSpin 0.8s linear infinite; margin-bottom: 20px;"></div>
+            <div style="font-size: 26px; font-weight: bold; color: #fbbf24; font-family: 'Merriweather', Georgia, serif; margin-bottom: 6px; letter-spacing: -0.5px;">⚖️ LexLocal</div>
+            <div style="font-size: 13px; color: #94a3b8; font-weight: 500;">Cargando sistema jurídico y causas...</div>
+        </div>
+        <style>@keyframes lexSpin { 100% { transform: rotate(360deg); } }</style>
+    </div>
 
     <script type="text/babel">
         const { useState, useEffect, useMemo, useRef } = React;
@@ -819,24 +854,41 @@ SERÁ JUSTICIA.`
             });
 
             const [currentUser, setCurrentUser] = useState(() => {
-                const saved = localStorage.getItem('lexlocal_user');
-                return saved ? JSON.parse(saved) : null;
+                try {
+                    const saved = localStorage.getItem('lexlocal_user');
+                    return (saved && saved !== 'undefined') ? JSON.parse(saved) : null;
+                } catch (e) {
+                    console.error('Error al cargar lexlocal_user:', e);
+                    return null;
+                }
             });
 
             const isAdmin = Boolean(currentUser && (currentUser.isAdmin || (currentUser.role && currentUser.role.toLowerCase().includes('admin'))));
 
             const [expedientes, setExpedientes] = useState(() => {
-                const saved = localStorage.getItem('lexlocal_expedientes');
-                let list = saved ? JSON.parse(saved) : INITIAL_EXPEDIENTES;
-                if (!list.some(e => e.id === 'exp-robo-agravado')) {
-                    list = [CASE_ROBO_AGRAVADO, ...list];
+                try {
+                    const saved = localStorage.getItem('lexlocal_expedientes');
+                    let list = (saved && saved !== 'undefined') ? JSON.parse(saved) : null;
+                    if (!Array.isArray(list)) list = INITIAL_EXPEDIENTES;
+                    if (!list.some(e => e.id === 'exp-robo-agravado')) {
+                        list = [CASE_ROBO_AGRAVADO, ...list];
+                    }
+                    return list;
+                } catch (e) {
+                    console.error('Error al cargar lexlocal_expedientes:', e);
+                    return INITIAL_EXPEDIENTES;
                 }
-                return list;
             });
 
             const [auditLogs, setAuditLogs] = useState(() => {
-                const saved = localStorage.getItem('lexlocal_logs');
-                return saved ? JSON.parse(saved) : INITIAL_AUDIT_LOGS;
+                try {
+                    const saved = localStorage.getItem('lexlocal_logs');
+                    const list = (saved && saved !== 'undefined') ? JSON.parse(saved) : null;
+                    return Array.isArray(list) ? list : INITIAL_AUDIT_LOGS;
+                } catch (e) {
+                    console.error('Error al cargar lexlocal_logs:', e);
+                    return INITIAL_AUDIT_LOGS;
+                }
             });
 
             const [activeTab, setActiveTab] = useState('expedientes');
@@ -2410,10 +2462,6 @@ SERÁ JUSTICIA.`
                                 Cerrar
                             </button>
                         </div>
-                    </div>
-                </div>
-            );
-        }
                     </div>
                 </div>
             );
